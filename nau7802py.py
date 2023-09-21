@@ -1,4 +1,4 @@
-import smbus
+from machine import I2C, Pin
 import time
 
 # Register Map
@@ -105,9 +105,9 @@ NAU7802_Cal_Status = {'NAU7802_CAL_SUCCESS': 0,
 
 class NAU7802():
     # Default constructor
-    def __init__(self, i2cPort = 1, deviceAddress = 0x2A, zeroOffset = False,
+    def __init__(self, i2c = 0, scl=5, sda=4, deviceAddress = 0x2A, zeroOffset = False,
                  calibrationFactor = False):
-        self.bus = smbus.SMBus(i2cPort)    # This stores the user's requested i2c port
+        self.bus = I2C(id=i2c, scl=Pin(scl), sda=Pin(sda), freq=400_000)    # This stores the user's requested i2c port
         self.deviceAddress = deviceAddress    # Default unshifted 7-bit address of the NAU7802
 
         # y = mx + b
@@ -221,7 +221,7 @@ class NAU7802():
         while not self.available():
             pass
         
-        block = self.bus.read_i2c_block_data(self.deviceAddress, Scale_Registers['NAU7802_ADCO_B2'], 3)
+        block = self.bus.readfrom_mem(self.deviceAddress, Scale_Registers['NAU7802_ADCO_B2'], 3)
         
         valueRaw = block[0] << 16    # MSB
         valueRaw |= block[1] << 8    #MidSB
@@ -242,9 +242,10 @@ class NAU7802():
     # Get contents of a register
     def getRegister(self, registerAddress):    # Get contents of a register
         try:
-            return self.bus.read_i2c_block_data(self.deviceAddress, registerAddress, 1)[0]
+            s = self.bus.readfrom_mem(self.deviceAddress, registerAddress, 1)
+            return s[0]
         except:
-            return False    # Error
+            return False
 
     # Get the revision code of this IC
     def getRevisionCode(self):    # Get the revision code of this IC. Always 0x0F.
@@ -276,7 +277,7 @@ class NAU7802():
     # Tests for device ack to I2C address
     def isConnected(self):    # Returns true if device acks at the I2C address
         try:
-            self.bus.read_byte(self.deviceAddress)
+            self.bus.readfrom(self.deviceAddress, 1)
             return True
         except:
             return False
@@ -307,7 +308,7 @@ class NAU7802():
         self.setBit(PU_CTRL_Bits['NAU7802_PU_CTRL_RR'], Scale_Registers['NAU7802_PU_CTRL']) # Set RR
         time.sleep(0.001)
         return self.clearBit(PU_CTRL_Bits['NAU7802_PU_CTRL_RR'], Scale_Registers['NAU7802_PU_CTRL']) # Clear RR to leave reset state
-
+        
     # Mask & set a given bit within a register
     def setBit(self, bitNumber, registerAddress):    # Mask & set a given bit within a register
         value = self.getRegister(registerAddress)
@@ -364,9 +365,9 @@ class NAU7802():
     # Return true if successful
     def setRegister(self, registerAddress, value):    # Send a given value to be written to given address. Return true if successful
         try:
-            self.bus.write_word_data(self.deviceAddress, registerAddress, value)
+          self.bus.writeto_mem(self.deviceAddress, registerAddress, value.to_bytes(1, 'big'))
         except:
-            return False    # Sensor did not ACK
+          return False
         return True
 
     # Set the readings per second
@@ -401,3 +402,4 @@ class NAU7802():
         if cal_ready == NAU7802_Cal_Status['NAU7802_CAL_SUCCESS']:
             return True
         return False
+
